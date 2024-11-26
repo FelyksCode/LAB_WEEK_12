@@ -3,8 +3,16 @@ package com.example.lab_week_12
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import com.example.lab_week_12.model.Movie
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
     private val movieAdapter by lazy {
@@ -21,6 +29,43 @@ class MainActivity : AppCompatActivity() {
 
         val recyclerView: RecyclerView = findViewById(R.id.movie_list)
         recyclerView.adapter = movieAdapter
+
+        // Get the MovieRepository from the MovieApplication
+        val movieRepository = (application as MovieApplication).movieRepository
+
+        // Create a MovieViewModel instance and bind the MovieRepository to it
+        // This allows us to use the MovieRepository in the MovieViewModel
+        val movieViewModel = ViewModelProvider(
+            this, object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return MovieViewModel(movieRepository) as T
+                }
+            }
+        )[MovieViewModel::class.java]
+        lifecycleScope.launch {
+            // repeatOnLifecycle is a lifecycle-aware coroutine builder
+            // Lifecycle.State.STARTED means that the coroutine will run
+            // when the activity is started
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    // collect the list of movies from the StateFlow
+                    movieViewModel.popularMovies.collect {
+                        // add the list of movies to the adapter
+                            movies ->
+                        movieAdapter.addMovies(movies)
+                    }
+                }
+                launch {
+                    // collect the error message from the StateFlow
+                    movieViewModel.error.collect { error ->
+                        if (error.isNotEmpty()) Snackbar
+                            .make(
+                                recyclerView, error, Snackbar.LENGTH_LONG
+                            ).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun openMovieDetails(movie: Movie) {
